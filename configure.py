@@ -84,6 +84,35 @@ def build_java_pipeline_group(configurator):
     vulnerable_components_job.add_task(FetchArtifactTask('java_build', 'java_build_stage', 'java_compile_job', FetchArtifactDir('java_compile_job/java')))
     _add_exec_task(vulnerable_components_job, 'gradle --profile dependencyCheck', 'java')
 
+def build_java_canary_pipeline_group(configurator):
+    pipeline = _create_pipeline("java_canary", "java_canary_build")
+    pipeline.ensure_material(PipelineMaterial('java_secrets', 'java_secrets_stage'))
+    compile_job = pipeline.ensure_stage("java_build_stage") \
+        .ensure_job("java_compile_job") \
+        .ensure_artifacts({BuildArtifact("*", "java_compile_job")})
+    compile_job.add_task(FetchArtifactTask('java_secrets', 'java_secrets_stage', 'find_secrets_job', FetchArtifactDir('find_secrets_job/java')))
+    _add_exec_task(compile_job, 'gradle -b canary.build --profile clean', 'java')
+    _add_exec_task(compile_job, 'gradle -b canary.build --profile compileJava', 'java')
+    _add_exec_task(compile_job, 'gradle -b canary.build --profile compileTestJava', 'java')
+
+    pipeline = _create_pipeline("java_canary", "java_canary_unit_test")
+    pipeline.ensure_material(PipelineMaterial('java_build', 'java_build_stage'))
+    unit_test_job = pipeline.ensure_stage("unit_test") \
+        .ensure_job("run_tests") \
+        .ensure_artifacts({TestArtifact("java_build/java/build/reports")}) \
+        .ensure_tab(Tab("JUnit", "reports/tests/index.html"))
+    unit_test_job.add_task(FetchArtifactTask('java_build', 'java_build_stage', 'java_compile_job', FetchArtifactDir('java_compile_job/java')))
+    _add_exec_task(unit_test_job, 'gradle -b canary.build --profile test', 'java')
+
+    pipeline = _create_pipeline("java_canary", "java_canary_vulnerable_components")
+    pipeline.ensure_material(PipelineMaterial('java_build', 'java_build_stage'))
+    vulnerable_components_job = pipeline.ensure_stage("verify_components") \
+        .ensure_job("check_java_dependencies") \
+        .ensure_artifacts({TestArtifact("java/build/reports/dependency-check-report.html")}) \
+        .ensure_tab(Tab("Vulnerabilities", "dependency-check-report.html"))
+    vulnerable_components_job.add_task(FetchArtifactTask('java_build', 'java_build_stage', 'java_compile_job', FetchArtifactDir('java_compile_job/java')))
+    _add_exec_task(vulnerable_components_job, 'gradle -b canary.build --profile dependencyCheck', 'java')
+
 def build_ruby_pipeline_group(configurator):
     pipeline = _create_pipeline("ruby", "ruby_build")
     pipeline.set_git_url("https://github.com/wendyi/continuousSecurityRuby")
@@ -113,6 +142,7 @@ configurator = GoCdConfigurator(HostRestClient("localhost:8153"))
 configurator.remove_all_pipeline_groups()
 build_csharp_pipeline_group(configurator)
 build_java_pipeline_group(configurator)
+build_java_canary_pipeline_group(configurator)
 build_ruby_pipeline_group(configurator)
 configurator.save_updated_config()
 
