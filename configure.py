@@ -140,9 +140,9 @@ def build_ruby_pipeline_group(configurator):
 
 configurator = GoCdConfigurator(HostRestClient("localhost:8153"))
 configurator.remove_all_pipeline_groups()
-build_csharp_pipeline_group(configurator)
+# build_csharp_pipeline_group(configurator)
 build_java_pipeline_group(configurator)
 build_java_canary_pipeline_group(configurator)
-build_ruby_pipeline_group(configurator)
+# build_ruby_pipeline_group(configurator)
 configurator.save_updated_config()
 
